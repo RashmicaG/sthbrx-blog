@@ -130,13 +130,22 @@ This benchmark uses libblas, a very basic BLAS based on Fortran. It only uses 1 
 Joel also wrote up his work on this [here](https://shenki.github.io/Scikit-Learn-on-Power9/).
 
 ### Blender
-Blender is a 3D graphics suite that supports animation, simulation, game creation and more! On the surface it appears that Blender 2.79a (the version that Phoronix used) has some multithreading issues - it doesn't use more than 15 threads even when using -t 128.
+Blender is a 3D graphics suite that supports image rendering, animation, simulation and game creation. On the surface it appears that Blender 2.79b (the distro package version that Phoronix used by system/blender-1.0.2) failed to use more than 15 threads, even when "-t 128" was added to the bender command line.
 
+It turns out that even though this benchmark was supposed to be run on CPUs only (you can choose to render on CPUs or GPUs), the GPU file was always being used. The GPU file is configured with a very large tile size of 256x256 being used - which is (fine for GPUs)[https://docs.blender.org/manual/en/dev/render/cycles/settings/scene/render/performance.html#tiles] but not great for CPUs. The image size (1280x720) to tile size ratio limits the number of jobs created and therefore the number threads used. Fortunately this has already been fixed in the [pts/blender-1.1.1](https://openbenchmarking.org/test/pts/blender) of Phoronix.
 
-However it turns out that even though this benchmark was supposed to be run on CPUs only (you can choose to render on CPUs or GPUs), the GPU file was always being used. This results in a very large tile size of 256x256 being used - which is (fine for GPUs)[https://docs.blender.org/manual/en/dev/render/cycles/settings/scene/render/performance.html#tiles] but not great for CPUs. The image size to tile size ratio limits the number of jobs created and therefore the number threads used. Fortunately this has already been fixed in the <version> of phoronix.
+To obtain a realistic CPU measurement with more that 15 threads you can force the use of the cpu file by overwritting the gpu file with the cpu one:
 
-Or you can hack it by overwriting the gpu file with the cpu one:
+```$ cp ~/.phoronix-test-suite/installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_cpu.blend  ~/.phoronix-test-suite/installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_gpu.blend```
 
-```phoronix-test-suite$ cp installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_cpu.blend  installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_gpu.blend```
+![Blender HTOP Output][00]
 
-Speedup of ~XXX.
+Pinning to a single POWER9 core (```sudo ppc64_cpu --cores-on=22```) for the pts/bender-1.0.2, Pabellon Barcelona, CPU-Only test
+
+| Baseline (seconds) (deviation) | CPU blend file used (second) | Speedup |
+|--------------------------------|------------------------------|---------|
+| 1509.97 (0.30%)                | 458.64 (0.19%)               | 329%    |
+
+Near linear results occur with ```sudo ppc64_cpu --cores-on=44``` finishing in 241.33 (0.25%) seconds (625% speedup).
+
+[00]: /content/images/phoronix/blender-88threads.png "Blender with CPU Blend file"
