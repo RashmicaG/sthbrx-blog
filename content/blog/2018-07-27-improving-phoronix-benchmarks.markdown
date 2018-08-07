@@ -1,6 +1,6 @@
-Title: Improving Phoronix Benchmarks
+﻿Title: Improving Phoronix Benchmarks
 Date: 2018-07-27 22:22
-Authors: Rashmica Gupta
+Authors: Rashmica Gupta, Daniel Black, Anton Blanchard, Nick Piggin
 Category: Performance
 Tags: performance, phoronix, benchmarks
  
@@ -43,7 +43,6 @@ This is a very old benchmark, and really it should be resized to suit
 modern computers (eg increase resolution).
 
 
-
 ### x264 Video Encoding
 x264 is a library that encodes videos into the H.264/MPEG-4 format.
 
@@ -65,7 +64,7 @@ Even with --disable-asm, the output files are not identical between CPUs or diff
 
 x264 compiles with -fno-tree-vectorize by default, which disables auto vectorization. Enabling it (plus LTO) gives:
 Skylake: 2.25 fps
-POWER9 : 3.02 ps
+POWER9 : 3.02 fps
 
 Now let's remove --disable-asm to turn asm optimised code back on. A costly function, quant_4x4x4 is not vectorized in the POWER9 code. Without -fno-tree-vectorize, gcc can vectorize it with a small change to the loop (output file is unchanged):
 Skylake: 9.20 fps
@@ -75,22 +74,21 @@ Restricting Skylake to SSE4.2 with 128 bit vectors (same as POWER9) shows that A
 Skylake: 8.37 fps
 POWER9 : 3.83 fps
 
-Skylake is still much faster at the same vector size. It's surpising they are able to get 5.7x speedup with 128 bit vectors. 
+Skylake is still much faster at the same vector size. It's surprising they are able to get 5.7x speedup with 128 bit vectors. 
 
 
 ### Primesieve
 [Primesieve](https://primesieve.org/) is a program and C/C++ library that generates all the prime numbers below a given number. It uses an optimised [Sieve of Eratosthenes](https://upload.wikimedia.org/wikipedia/commons/b/b9/Sieve_of_Eratosthenes_animation.gif) implementation.
 
-The algorithm uses the L1 cache size to size the core loop.
-It correctly calculates the L1 size, but then doesn't realise that SMT
-threads share a core. This means the workload is 4x too large for the
-L1 cache.
+The algorithm uses the L1 cache size as the sieve size for the core loop.
+This is an issue when we are running in SMT (simulatenous multi-threading) mode (aka more than one thread per core) as all threads on a core share the same L1 cache and so will constantly be invalidating each others cache-lines. As you can see in the table below, running the benchmark in single threaded mode is 30% faster than in SMT4 mode!
 
-Running it in ST mode gives a 30% improvement. We could ask them to
-rerun in ST mode, or perhaps look at teaching primesieve about
-threading.
+This means in SMT-4 mode the workload is about 4x too large for the L1 cache. A better sieve size to use would be the L1 cache size / number of (online?) threads per core. Anton posted a [pull request](https://github.com/kimwalisch/primesieve/pull/54) to update the sieve size.
 
-Anton posted a [first pass](https://github.com/kimwalisch/primesieve/pull/54) at this.
+
+
+
+
 
 Interesting that the best overall performance is with the patch applied
 and in SMT2 mode.
@@ -103,16 +101,26 @@ Time in seconds:
 |2           |    15.362     |     14.040|
 |4           |    19.489     |     17.458|
 
+
+
 ### FLAC
 [FLAC](https://xiph.org/flac/) is an alternative encoding format to MP3. But unlike MP3 encoding it is lossless!
-The benchmark here was encoding audio files into the FLAC format. The key part of this workload is missing vector support for POWER8 and POWER9. With this [patch series](http://lists.xiph.org/pipermail/flac-dev/2018-July/006351.html) we get at best a 3.3x improvement.
+The benchmark here was encoding audio files into the FLAC format. The key part of this workload is missing vector
+support for POWER8 and POWER9. Anton and Amitay submitted this [patch series](http://lists.xiph.org/pipermail/flac-dev/2018-July/006351.html) that adds in
+POWER specific vector instructions and fixes the configuration options to correctly detect powerpc versions. With this we get at best a 3.3x improvement in this benchmark!
 
 ### LAME
 Despite its name, a recursive acronym for "LAME Ain't an MP3 Encoder", [LAME](http://lame.sourceforge.net/) is indeed an MP3 encoder.
 
-Joel already wrote about the improvements [here](https://shenki.github.io/LameMP3-on-Power9/) but the gist is that this benchmark is built without any optimisation regardless of architecture. We see a massive speedup by turning optimisations on, and a further 8% speedup by enabling FAST_LOG (which is already enabled for Intel).
+Due to configure options [not being parsed correctly](https://sourceforge.net/p/lame/mailman/message/36371506/) this benchmark is built without any optimisation regardless of architecture. We see a massive speedup by turning optimisations on, and a further 6-8% speedup by enabling [USE_FAST_LOG](https://sourceforge.net/p/lame/mailman/message/36372005/) (which is already enabled for Intel).
 
+| LAME | Duration | Speedup |
+|---------|-------------|--|
+| Default | 82.1s | n/a |
+| With optimisation flags | 16.3s | ~5.0x |
+| USE_FAST_LOG set | 15.6s | ~5.3x  |
 
+For more detail see Joel's [writeup](https://shenki.github.io/LameMP3-on-Power9/).
 
 ### OpenSSL
 
@@ -121,13 +129,21 @@ Other than that, it's mostly hardware.
 
 
 ### SciKit-Learn
-SciKit-Learn is a bunch of tools for data mining and analysis (aka machine learning).
+SciKit-Learn is a bunch of python tools for data mining and analysis (aka machine learning).
 
-This benchmark uses libblas, a very basic BLAS based on Fortran. It only uses 1 CPU, and even worse Ubuntu/Debian (worse than what?). Using alternative BLAS's that have PowerPC optimisations (such as libatlas or libopenblas) we see big improvements in this benchmark.
+Joel noticed that the benchmark spent 92% of the time in libblas. Libblas is a very basic BLAS (basic linear algebra supprograms) library that python-numpy uses to do vector and matrix operations.
+The default libblas on Ubuntu is only compiled with -O2. Compiling with -Ofast and using alternative BLAS's that have PowerPC optimisations (such as libatlas or libopenblas) we see big improvements in this benchmark (these times are for one run of computations, the benchmark does this 5 times):
 
-- decided to disable vectorisation on ppc64le only.
 
-Joel also wrote up his work on this [here](https://shenki.github.io/Scikit-Learn-on-Power9/).
+| BLAS used | Duration | Speedup |
+|---------|-------------|--|
+| libblas -O2 | 64.2s | n/a |
+| libblas -Ofast |  36.1s | ~1.8x |
+| libatlas | 8.3s | ~7.7x  |
+| libopenblas | 4.2s | ~15.3x |
+
+
+You can read more details about this [here](https://shenki.github.io/Scikit-Learn-on-Power9/).
 
 ### Blender
 Blender is a 3D graphics suite that supports image rendering, animation, simulation and game creation. On the surface it appears that Blender 2.79b (the distro package version that Phoronix used by system/blender-1.0.2) failed to use more than 15 threads, even when "-t 128" was added to the bender command line.
@@ -138,14 +154,21 @@ To obtain a realistic CPU measurement with more that 15 threads you can force th
 
 ```$ cp ~/.phoronix-test-suite/installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_cpu.blend  ~/.phoronix-test-suite/installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_gpu.blend```
 
+As you can see in the image below, now all of the cores are being utilised!
 ![Blender HTOP Output][00]
 
-Pinning to a single POWER9 core (```sudo ppc64_cpu --cores-on=22```) for the pts/bender-1.0.2, Pabellon Barcelona, CPU-Only test
 
-| Baseline (seconds) (deviation) | CPU blend file used (second) | Speedup |
+
+| Benchmark | Duration (deviation over 3 runs)) | Speedup |
 |--------------------------------|------------------------------|---------|
-| 1509.97 (0.30%)                | 458.64 (0.19%)               | 329%    |
+| Baseline (GPU blend file) |  1509.97s (0.30%) | n/a |
+| Single 22-core POWER9 chip (CPU blend file)  | 458.64s (0.19%) | 3.29x    |
+| Two 22-core POWER9 chips (CPU blend file)  | 241.33s (0.25%) | 6.25x |
 
-Near linear results occur with ```sudo ppc64_cpu --cores-on=44``` finishing in 241.33 (0.25%) seconds (625% speedup).
 
-[00]: /content/images/phoronix/blender-88threads.png "Blender with CPU Blend file"
+Pinning the pts/bender-1.0.2, Pabellon Barcelona, CPU-Only test to a single 22-core POWER9 chip (```sudo ppc64_cpu --cores-on=22```) and two POWER9 chips (```sudo ppc64_cpu --cores-on=44```) show a huge speedup.
+
+[00]: /images/phoronix/blender-88threads.png "Blender with CPU Blend file"
+
+
+
