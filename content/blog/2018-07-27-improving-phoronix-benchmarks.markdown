@@ -13,7 +13,7 @@ comparing the performance of our POWER9 processor against the Intel Xeon and AMD
 EPYC processors. 
 
 We did well in the Stockfish, LLVM Compilation, Zstd compression, and the
-Tinymembench benchmarks. Some of my colleagues did a bit of investigating into
+Tinymembench benchmarks. A few of my colleagues did a bit of investigating into
 the benchmarks where we didn't perform quite so well.
 
 Some of the benchmarks where we don't perform as well as Intel are where the
@@ -58,8 +58,8 @@ x264 has a lot of integer kernels doing operations on image elements. The math
 and vectorisation optimisations are quite complex, so Nick had a quick look at
 the basics.  The systems and environments (e.g. gcc version 8.1 for Skylake, 8.0
 for POWER9) are not completely apples to apples so for now patterns are more
-important than the absolute results. All tests were run with --threads 1 to
-avoid SMT effects.
+important than the absolute results. All tests were run single threaded to
+avoid any SMT (simulatenous multi-threading) effects.
 
 Skylake is significantly faster than POWER9 on this test: Skylake: 9.20 fps
 POWER9 : 3.39 fps
@@ -94,45 +94,25 @@ optimised [Sieve of Eratosthenes](https://upload.wikimedia.org/wikipedia/commons
 implementation.
 
 The algorithm uses the L1 cache size as the sieve size for the core loop.  This
-is an issue when we are running in SMT (simulatenous multi-threading) mode (aka
-more than one thread per core) as all threads on a core share the same L1 cache
-and so will constantly be invalidating each others cache-lines. As you can see
+is an issue when we are running in SMT mode (aka more than one thread per core)
+as all threads on a core share the same L1 cache and so will constantly be 
+invalidating each others cache-lines. As you can see
 in the table below, running the benchmark in single threaded mode is 30% faster
 than in SMT4 mode!
 
 This means in SMT-4 mode the workload is about 4x too large for the L1 cache.  A
-better sieve size to use would be the L1 cache size / number of (online?)
-threads per core. Anton posted a [pull request](https://github.com/kimwalisch/primesieve/pull/54) to update the sieve
-size.
+better sieve size to use would be the L1 cache size / number of
+threads per core. Anton posted a [pull request](https://github.com/kimwalisch/primesieve/pull/54) 
+to update the sieve size.
 
-
-
-
-
-
-Interesting that the best overall performance is with the patch applied and in
-SMT2 mode.
-
-Time in seconds:
+Interesting that the best overall performance on POWER9 is with the patch applied and in
+SMT2 mode:
 
 |SMT level   |    baseline   |     patched|
 |------------|---------------|----------|
-|1           |    14.728     | 14.899	|
-|2           |    15.362     | 14.040	|
-|4           |    19.489     | 17.458	|
-
-
-
-### FLAC
-
-[FLAC](https://xiph.org/flac/) is an alternative encoding format to
-MP3. But unlike MP3 encoding it is lossless!  The benchmark here was encoding
-audio files into the FLAC format. The key part of this workload is missing
-vector support for POWER8 and POWER9. Anton and Amitay submitted this
-[patch series](http://lists.xiph.org/pipermail/flac-dev/2018-July/006351.html) that
-adds in POWER specific vector instructions and fixes the configuration options
-to correctly detect powerpc versions. With this we get at best a 3.3x
-improvement in this benchmark!
+|1           |    14.728s     | 14.899s	|
+|2           |    15.362s     | 14.040s	|
+|4           |    19.489s     | 17.458s	|
 
 
 ### LAME 
@@ -156,9 +136,25 @@ is already enabled for Intel).
 For more detail see Joel's
 [writeup](https://shenki.github.io/LameMP3-on-Power9/).
 
+
+
+### FLAC
+
+[FLAC](https://xiph.org/flac/) is an alternative encoding format to
+MP3. But unlike MP3 encoding it is lossless!  The benchmark here was encoding
+audio files into the FLAC format. 
+
+The key part of this workload is missing
+vector support for POWER8 and POWER9. Anton and Amitay submitted this
+[patch series](http://lists.xiph.org/pipermail/flac-dev/2018-July/006351.html) that
+adds in POWER specific vector instructions. It also fixes the configuration options
+to correctly detect the POWER8 and POWER9 platforms. With this patch we get see about a 3x
+improvement in this benchmark.
+
+
 ### OpenSSL
 
-Mainline OpenSSL is almost 2x faster (than the version phoronix used??) because
+Mainline OpenSSL is almost 2x faster (than the version of OpenSSL that phoronix used??) because
 of [this commit](https://github.com/openssl/openssl/commit/68f6d2a02c8cc30c5c737fc948b7cf023a234b47).
 This commit adds some optimised multiplication and squaring assembly code.
 Other than that, it's mostly hardware.
@@ -207,6 +203,8 @@ but not great for CPUs. The image size (1280x720) to tile size ratio limits the
 number of jobs created and therefore the number threads used. Fortunately this
 has already been fixed in the
 [pts/blender-1.1.1](https://openbenchmarking.org/test/pts/blender) of Phoronix.
+
+https://github.com/phoronix-test-suite/test-profiles/issues/24 
 
 To obtain a realistic CPU measurement with more that 15 threads you can force
 the use of the cpu file by overwritting the gpu file with the cpu one:
