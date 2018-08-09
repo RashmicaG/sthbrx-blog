@@ -49,42 +49,50 @@ computers (eg increase resolution).
 
 
 ### x264 Video Encoding
-x264 is a library that encodes videos into the H.264/MPEG-4 format.
-
-Mostly vectorisation issues. We have [active bounties](https://www.bountysource.com/teams/ibm/bounties) for x264.
-
-
-x264 has a lot of integer kernels doing operations on image elements. The math
-and vectorisation optimisations are quite complex, so Nick had a quick look at
+x264 is a library that encodes videos into the H.264/MPEG-4 format. x264 encoding
+requires a lot of integer kernels doing operations on image elements. The math
+and vectorisation optimisations are quite complex, so Nick only had a quick look at
 the basics.  The systems and environments (e.g. gcc version 8.1 for Skylake, 8.0
 for POWER9) are not completely apples to apples so for now patterns are more
-important than the absolute results. All tests were run single threaded to
+important than the absolute results. Interestingly the output video files between
+architectures are not the same. All tests were run single threaded to
 avoid any SMT (simulatenous multi-threading) effects.
 
-Skylake is significantly faster than POWER9 on this test: Skylake: 9.20 fps
-POWER9 : 3.39 fps
+Skylake is significantly faster than POWER9 on this test
+(Skylake: 9.20 fps, POWER9: 3.39 fps).
 
-Let's start with a baseline, run both with --disable-asm that generates
-unvectorized binaries from common C code: Skylake: 1.47 fps POWER9 : 1.54 fps
-
-Even with --disable-asm, the output files are not identical between CPUs or
+One might hazard a guess that we could get better results by writing powerpc specific
+assembly for more functions (in the version of x264 that Phoronix used there are only
+six powerpc specific files compared with 21 x86 specific files). When running
+with only the common C code (using the configure option --disable-asm) we have about
+same performance (Skylake: 1.47 fps, POWER9: 1.54 fps). However even without the architecture
+specific asm, the output files are not identical between CPUs or
 different compile options, which is a concern with no floating point. Perhaps
-there is a bug or some undefined behaviour in the code.
+there is a bug or some undefined behaviour in the code?
 
 x264 compiles with -fno-tree-vectorize by default, which disables auto
-vectorization. Enabling it (plus LTO) gives: Skylake: 2.25 fps POWER9 : 3.02 fps
+vectorization. Removing this option along with link time optimisations
+gives: Skylake: 2.25 fps,  POWER9: 3.02 fps. 
 
-Now let's remove --disable-asm to turn asm optimised code back on. A costly
-function, quant_4x4x4 is not vectorized in the POWER9 code.  Without
--fno-tree-vectorize, gcc can vectorize it with a small change to the loop
-(output file is unchanged): Skylake: 9.20 fps POWER9 : 3.83 ps
+Now let's turn asm optimised code back on (removing the --disable-asm option).
+A costly function, quant_4x4x4 is not vectorized in the POWER9 code. Without
+-fno-tree-vectorize and with a small change to the code gcc can automatically 
+vectorize it for us, giving up a slight speedup: Skylake: 9.20 fps, POWER9: 3.83 fps.
 
-Restricting Skylake to SSE4.2 with 128 bit vectors (same as POWER9) shows that
-AVX2 does't provide huge gains: Skylake: 8.37 fps POWER9 : 3.83 fps
+Even trying to account for the different vector sizes by restricting Skylake
+to SSE4.2 with 128 bit vectors (same as POWER9) we still aren't even close to
+Skylake: Skylake: 8.37 fps, POWER9: 3.83 fps.
 
-Skylake is still much faster at the same vector size. It's surprising they are
-able to get 5.7x speedup with 128 bit vectors. 
+| Test |Skylake |POWER9|
+|-------|---------|-------|
+| Original |9.20 fps |3.39 fps|
+| Common C code only |1.47 fps | 1.54 fps|
+| Common C code and autovectorisation enabled| 2.25 fps | 3.02 fps| 
+| Arch specific asm and autovectorisation enabled| 9.20 fps | 3.83 ps |
+| Arch specific asm, autovectorisation enabled, same vector sizes | 8.37 fps | 3.83 fps|
 
+So we probably need some more powerpc specific implementations. If you're interested in looking into this, we do have some 
+[active bounties](https://www.bountysource.com/teams/ibm/bounties) for x264 (lu-zero/x264).
 
 ### Primesieve
 
@@ -218,7 +226,7 @@ As you can see in the image below, now all of the cores are being utilised!
 
 
 
-| Benchmark | Duration (deviation over 3 runs)) | Speedup |
+| Benchmark | Duration (deviation over 3 runs) | Speedup |
 |--------------------------------|------------------------------|---------|
 |Baseline (GPU blend file) |  1509.97s (0.30%) | n/a |
 | Single 22-core POWER9 chip (CPU blend file)  | 458.64s (0.19%) | 3.29x  |
