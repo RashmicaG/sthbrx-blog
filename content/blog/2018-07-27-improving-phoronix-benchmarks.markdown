@@ -162,15 +162,42 @@ improvement in this benchmark.
 
 ### OpenSSL
 
-Mainline OpenSSL is almost 2x faster (than the version of OpenSSL that phoronix used??) because
-of [this commit](https://github.com/openssl/openssl/commit/68f6d2a02c8cc30c5c737fc948b7cf023a234b47).
-This commit adds some optimised multiplication and squaring assembly code.
-Other than that, it's mostly hardware.
+[OpenSSL](https://www.openssl.org/) is among other things a cryptographic library. The Phoronix benchmark measures how many
+RSA 4096-bit signs per second:
+```
+$ openssl speed -multi $(nproc) rsa4096
+
+```
+
+Phoronix used OpenSSL-1.1.0f, which is almost half as slow for this benchmark (on POWER9) than mainline OpenSSL.
+Mainline OpenSSL has some powerpc multiplication and squaring assembly code which seems
+to make most of the difference.
+ 
+
+
+To see this for yourself, add these four powerpc specific commits on top of OpenSSL-1.1.0f:
+
+1. [perlasm/ppc-xlate.pl: recognize .type directive](https://github.com/openssl/openssl/commit/b17ff188b17499e83ca3b9df0be47a2f513ac3c5)
+2. [bn/asm/ppc-mont.pl: prepare for extension](https://github.com/openssl/openssl/commit/0310becc82d240288a4ab5c6656c10c18cab4454)
+3. [bn/asm/ppc-mont.pl: add optimized multiplication and squaring subroutines](https://github.com/openssl/openssl/commit/68f6d2a02c8cc30c5c737fc948b7cf023a234b47)
+4. [ppccap.c: engage new multipplication and squaring subroutines](https://github.com/openssl/openssl/commit/80d27cdb84985c697f8fabb7649abf1f54714d13)
+
+
+
+
+The following results were from a dual 16-core POWER9 and are indicative of the increase in performance resulting from these patches:
+
+| Version of OpenSSL | Signs/s | Speedup |
+|--------------------|----------|---------|
+|1.1.0f              |    1921   |  n/a   |
+|1.1.0f with 4 patches|   3353   | ~1.74x  |
+|1.1.1-pre1          |    3383   | ~1.76x   | 
+
 
 
 ### SciKit-Learn
 
-SciKit-Learn is a bunch of python tools for data mining and
+[SciKit-Learn](http://scikit-learn.org/) is a bunch of python tools for data mining and
 analysis (aka machine learning).
 
 Joel noticed that the benchmark spent 92% of the time in libblas. Libblas is a
@@ -196,7 +223,7 @@ You can read more details about this
 
 ### Blender
 
-Blender is a 3D graphics suite that supports image rendering,
+[Blender](https://www.blender.org/) is a 3D graphics suite that supports image rendering,
 animation, simulation and game creation. On the surface it appears that Blender
 2.79b (the distro package version that Phoronix used by system/blender-1.0.2)
 failed to use more than 15 threads, even when "-t 128" was added to the bender
