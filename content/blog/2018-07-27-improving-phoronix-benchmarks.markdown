@@ -1,6 +1,6 @@
 ﻿Title: Improving Phoronix Benchmarks
 Date: 2018-07-27 22:22
-Authors: Rashmica Gupta, Daniel Black, Anton Blanchard, Nick Piggin
+Authors: Rashmica Gupta, Daniel Black, Anton Blanchard, Nick Piggin, Joel Stanley
 Category: Performance
 Tags: performance, phoronix, benchmarks
  
@@ -237,21 +237,27 @@ GPUs](https://docs.blender.org/manual/en/dev/render/cycles/settings/scene/render
 but not great for CPUs. The image size (1280x720) to tile size ratio limits the
 number of jobs created and therefore the number threads used. Fortunately this
 has already been fixed in the
-[pts/blender-1.1.1](https://openbenchmarking.org/test/pts/blender) of Phoronix.
-
-https://github.com/phoronix-test-suite/test-profiles/issues/24 
+[pts/blender-1.1.1](https://openbenchmarking.org/test/pts/blender).
+Thanks to the [report](https://github.com/phoronix-test-suite/test-profiles/issues/24) by Daniel it
+has also been fixed in [system/blender-1.1.0](http://openbenchmarking.org/test/system/blender-1.1.0).
 
 To obtain a realistic CPU measurement with more that 15 threads you can force
 the use of the cpu file by overwritting the gpu file with the cpu one:
 
-```$ cp
+```
+$ cp
 ~/.phoronix-test-suite/installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_cpu.blend
-~/.phoronix-test-suite/installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_gpu.blend```
+~/.phoronix-test-suite/installed-tests/system/blender-1.0.2/benchmark/pabellon_barcelona/pavillon_barcelone_gpu.blend
+```
 
 As you can see in the image below, now all of the cores are being utilised!
 ![Blender HTOP Output][00]
 
 
+
+Pinning the pts/bender-1.0.2, Pabellon Barcelona, CPU-Only test to a single
+22-core POWER9 chip (```sudo ppc64_cpu --cores-on=22```) and two POWER9 chips
+(```sudo ppc64_cpu --cores-on=44```) show a huge speedup:
 
 | Benchmark | Duration (deviation over 3 runs) | Speedup |
 |--------------------------------|------------------------------|---------|
@@ -259,10 +265,6 @@ As you can see in the image below, now all of the cores are being utilised!
 | Single 22-core POWER9 chip (CPU blend file)  | 458.64s (0.19%) | 3.29x  |
 | Two 22-core POWER9 chips (CPU blend file)  | 241.33s (0.25%) | 6.25x |
 
-
-Pinning the pts/bender-1.0.2, Pabellon Barcelona, CPU-Only test to a single
-22-core POWER9 chip (```sudo ppc64_cpu --cores-on=22```) and two POWER9 chips
-(```sudo ppc64_cpu --cores-on=44```) show a huge speedup.
 
 [00]: /images/phoronix/blender-88threads.png "Blender with CPU Blend file"
 
