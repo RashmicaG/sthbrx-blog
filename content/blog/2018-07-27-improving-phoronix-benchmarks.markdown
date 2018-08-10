@@ -201,12 +201,11 @@ The following results were from a dual 16-core POWER9 and are indicative of the 
 analysis (aka machine learning).
 
 Joel noticed that the benchmark spent 92% of the time in libblas. Libblas is a
-very basic BLAS (basic linear algebra supprograms) library that python-numpy
+very basic BLAS (basic linear algebra subprograms) library that python-numpy
 uses to do vector and matrix operations.  The default libblas on Ubuntu is only
 compiled with -O2. Compiling with -Ofast and using alternative BLAS's that have
-PowerPC optimisations (such as libatlas or libopenblas) we see big improvements
-in this benchmark (these times are for one run of computations, the benchmark
-does this 5 times):
+powerpc optimisations (such as libatlas or libopenblas) we see big improvements
+in this benchmark:
 
 
 | BLAS used | Duration | Speedup |
@@ -226,20 +225,17 @@ You can read more details about this
 [Blender](https://www.blender.org/) is a 3D graphics suite that supports image rendering,
 animation, simulation and game creation. On the surface it appears that Blender
 2.79b (the distro package version that Phoronix used by system/blender-1.0.2)
-failed to use more than 15 threads, even when "-t 128" was added to the bender
+failed to use more than 15 threads, even when "-t 128" was added to the Blender
 command line.
 
 It turns out that even though this benchmark was supposed to be run on CPUs only
 (you can choose to render on CPUs or GPUs), the GPU file was always being used.
-The GPU file is configured with a very large tile size of 256x256 being used -
+The GPU file is configured with a very large tile size (256x256) -
 which is [fine for
 GPUs](https://docs.blender.org/manual/en/dev/render/cycles/settings/scene/render/performance.html#tiles)
 but not great for CPUs. The image size (1280x720) to tile size ratio limits the
-number of jobs created and therefore the number threads used. Fortunately this
-has already been fixed in the
-[pts/blender-1.1.1](https://openbenchmarking.org/test/pts/blender).
-Thanks to the [report](https://github.com/phoronix-test-suite/test-profiles/issues/24) by Daniel it
-has also been fixed in [system/blender-1.1.0](http://openbenchmarking.org/test/system/blender-1.1.0).
+number of jobs created and therefore the number threads used.
+
 
 To obtain a realistic CPU measurement with more that 15 threads you can force
 the use of the cpu file by overwritting the gpu file with the cpu one:
@@ -252,6 +248,12 @@ $ cp
 
 As you can see in the image below, now all of the cores are being utilised!
 ![Blender HTOP Output][00]
+
+
+Fortunately this has already been fixed in 
+[pts/blender-1.1.1](https://openbenchmarking.org/test/pts/blender).
+Thanks to the [report](https://github.com/phoronix-test-suite/test-profiles/issues/24) by Daniel it
+has also been fixed in [system/blender-1.1.0](http://openbenchmarking.org/test/system/blender-1.1.0).
 
 
 
