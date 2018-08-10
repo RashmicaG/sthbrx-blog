@@ -232,8 +232,8 @@ command line.
 It turns out that even though this benchmark was supposed to be run on CPUs only
 (you can choose to render on CPUs or GPUs), the GPU file was always being used.
 The GPU file is configured with a very large tile size of 256x256 being used -
-which is (fine for
-GPUs)[https://docs.blender.org/manual/en/dev/render/cycles/settings/scene/render/performance.html#tiles]
+which is [fine for
+GPUs](https://docs.blender.org/manual/en/dev/render/cycles/settings/scene/render/performance.html#tiles)
 but not great for CPUs. The image size (1280x720) to tile size ratio limits the
 number of jobs created and therefore the number threads used. Fortunately this
 has already been fixed in the
