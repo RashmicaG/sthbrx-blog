@@ -14,12 +14,7 @@ EPYC processors.
 
 We did well in the Stockfish, LLVM Compilation, Zstd compression, and the
 Tinymembench benchmarks. A few of my colleagues did a bit of investigating into
-the benchmarks where we didn't perform quite so well.
-
-Some of the benchmarks where we don't perform as well as Intel are where the
-benchmark has inline assembly for x86 but uses generic C compiler generated
-assembly for POWER9. We also found a few things that should result in better
-performance for all architectures.
+some the benchmarks where we didn't perform quite so well.
 
 
 ### LBM / Parboil 
@@ -279,7 +274,14 @@ Pinning the pts/bender-1.0.2, Pabellon Barcelona, CPU-Only test to a single
 
 ### tl;dr
 
-A nice little summary table of the benchmarks we looked at:
+Some of the benchmarks where we don't perform as well as Intel are where the
+benchmark has inline assembly for x86 but uses generic C compiler generated
+assembly for POWER9. We could probably benefit with some more powerpc optimsed functions.
+
+We also found a couple of things that should result in better performance for all three architectures,
+not just POWER.
+
+A summary of the performance improvements we found:
 
 | Benchmark | Approximate Improvement |
 |-----------|-------------|
@@ -292,12 +294,8 @@ A nice little summary table of the benchmarks we looked at:
 | SciKit-Learn | 7-15x   |
 | Blender   | 	 3x	  |	
 
-
-As some of these changes would also result in speedups on Intel and AMD, it
-would be interesting to see a re-run of the Phoronix benchmarks with these changes. 
-
-We could do with some more work on these, especially the Primesieve and x264 benchmarks. 
-
+There is obviously room for more improvements, especially with the Primesieve and x264 benchmarks,
+but it would be interesting to see a re-run of the Phoronix benchmarks with these changes. 
 
 
 
