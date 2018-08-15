@@ -5,7 +5,6 @@ Category: Performance
 Tags: performance, phoronix, benchmarks
  
 
-### Intro
 
 Recently Phoronix ran a range of
 [benchmarks](https://www.phoronix.com/scan.php?page=article&item=power9-talos-2&num=1)
@@ -22,7 +21,7 @@ some the benchmarks where we didn't perform quite so well.
 The [Parboil benchmarks](http://impact.crhc.illinois.edu/parboil/parboil.aspx) are a
 collection of programs from various scientific and commercial fields that are
 useful for examining the performance and development of different architectures
-and tools.  In this case Phoronix used the lbm
+and tools.  In this round of benchmarks Phoronix used the lbm
 [benchmark](https://www.spec.org/cpu2006/Docs/470.lbm.html): a fluid dynamics
 simulation using the Lattice-Boltzmann Method.
 
@@ -36,13 +35,13 @@ calculations done in each time step across many CPUs. The number of
 calculations scales with the resolution of the simulation.
 
 Unfortunately, the resolution (and therefore the work done in each time
-step) is too small for modern CPUs with large numbers of SMT threads. OpenMP 
+step) is too small for modern CPUs with large numbers of SMT (simulatenous multi-threading) threads. OpenMP 
 doesn't have enough work to parallelise and the system stays relatively idle. This
 means the benchmark scales relatively poorly, and is definitely
 not making use of the large POWER9 system
 
 Also this benchmark is compiled without any optimisation. Recompiling with -O3 improves the
-   results 3.2x.
+   results 3.2x on POWER9.
 
 
 
@@ -50,15 +49,15 @@ Also this benchmark is compiled without any optimisation. Recompiling with -O3 i
 x264 is a library that encodes videos into the H.264/MPEG-4 format. x264 encoding
 requires a lot of integer kernels doing operations on image elements. The math
 and vectorisation optimisations are quite complex, so Nick only had a quick look at
-the basics.  The systems and environments (e.g. gcc version 8.1 for Skylake, 8.0
+the basics. The systems and environments (e.g. gcc version 8.1 for Skylake, 8.0
 for POWER9) are not completely apples to apples so for now patterns are more
 important than the absolute results. Interestingly the output video files between
 architectures are not the same, particularly with different asm routines and 
-compiler optios used, which makes it difficult to verify the correctness of changes.
+compiler options used, which makes it difficult to verify the correctness of changes.
 
 All tests were run single threaded to avoid any SMT effects.
 
-With the default upstream build, Skylake is significantly faster than POWER9 on this test
+With the default upstream build of x264, Skylake is significantly faster than POWER9 on this benchmark
 (Skylake: 9.20 fps, POWER9: 3.39 fps). POWER9 contains some vectorised routines, so an
 initial suspicion is that Skylake's larger vector size may be responsible for its advantage.
 
@@ -77,7 +76,6 @@ that one costly function, quant_4x4x4, is not autovectorised. With a small chang
 code, gcc does vectorise it, giving a slight speedup with the output file checksum unchanged
 (Skylake: 9.20 fps, POWER9: 3.83 fps).
 
-
 We got a small improvement with the compiler, but it looks like we may have gains left on the
 table with our vector code. If you're interested in looking into this, we do have some
 [active bounties](https://www.bountysource.com/teams/ibm/bounties) for x264 (lu-zero/x264).
@@ -89,7 +87,7 @@ table with our vector code. If you're interested in looking into this, we do hav
 | Original - SSE4.2 | 8.37 fps | 3.39 fps|
 | Autovectorisation enabled, quant_4x4x4 vectorised| 9.20 fps | 3.83 fps |
 
-Nick also investigated SMT and multi cores, and it looks like the code is
+Nick also investigated running this benchmark with SMT enabled and across multiple cores, and it looks like the code is
 not scalable enough to feed 176 threads on a 44 core system. Disabling SMT in parallel runs
 actually helped, but there was still idle time. That may be another thing to look at,
 although it may not be such a problem for smaller systems.
@@ -115,7 +113,7 @@ better sieve size to use would be the L1 cache size / number of
 threads per core. Anton posted a [pull request](https://github.com/kimwalisch/primesieve/pull/54) 
 to update the sieve size.
 
-Interesting that the best overall performance on POWER9 is with the patch applied and in
+It is interesting that the best overall performance on POWER9 is with the patch applied and in
 SMT2 mode:
 
 |SMT level   |    baseline   |     patched|
@@ -158,14 +156,14 @@ The key part of this workload is missing
 vector support for POWER8 and POWER9. Anton and Amitay submitted this
 [patch series](http://lists.xiph.org/pipermail/flac-dev/2018-July/006351.html) that
 adds in POWER specific vector instructions. It also fixes the configuration options
-to correctly detect the POWER8 and POWER9 platforms. With this patch we get see about a 3x
+to correctly detect the POWER8 and POWER9 platforms. With this patch series we get see about a 3x
 improvement in this benchmark.
 
 
 ### OpenSSL
 
-[OpenSSL](https://www.openssl.org/) is among other things a cryptographic library. The Phoronix benchmark measures how many
-RSA 4096-bit signs per second:
+[OpenSSL](https://www.openssl.org/) is among other things a cryptographic library. The Phoronix benchmark
+measures the number of RSA 4096 signs per second:
 ```
 $ openssl speed -multi $(nproc) rsa4096
 
@@ -173,7 +171,7 @@ $ openssl speed -multi $(nproc) rsa4096
 
 Phoronix used OpenSSL-1.1.0f, which is almost half as slow for this benchmark (on POWER9) than mainline OpenSSL.
 Mainline OpenSSL has some powerpc multiplication and squaring assembly code which seems
-to make most of the difference.
+to be responsible for most of this speedup.
  
 
 
@@ -187,7 +185,7 @@ To see this for yourself, add these four powerpc specific commits on top of Open
 
 
 
-The following results were from a dual 16-core POWER9 and are indicative of the increase in performance resulting from these patches:
+The following results were from a dual 16-core POWER9:
 
 | Version of OpenSSL | Signs/s | Speedup |
 |--------------------|----------|---------|
@@ -297,7 +295,7 @@ A summary of the performance improvements we found:
 There is obviously room for more improvements, especially with the Primesieve and x264 benchmarks,
 but it would be interesting to see a re-run of the Phoronix benchmarks with these changes. 
 
-
+Thanks to Anton, Daniel, Joel and Nick for the analysis of the above benchmarks.
 
 [00]: /images/phoronix/blender-88threads.png "Blender with CPU Blend file"
 
