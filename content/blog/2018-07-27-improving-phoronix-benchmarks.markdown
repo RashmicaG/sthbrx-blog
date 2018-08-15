@@ -1,4 +1,4 @@
-﻿Title: Improving Phoronix Benchmarks
+﻿Title: Improving performance of Phoronix benchmarks on POWER9
 Date: 2018-07-27 22:22
 Authors: Rashmica Gupta, Daniel Black, Anton Blanchard, Nick Piggin, Joel Stanley
 Category: Performance
@@ -27,25 +27,28 @@ performance for all architectures.
 The [Parboil benchmarks](http://impact.crhc.illinois.edu/parboil/parboil.aspx) are a
 collection of programs from various scientific and commercial fields that are
 useful for examining the performance and development of different architectures
-and tools.  Phoronix uses the lbm
+and tools.  In this case Phoronix used the lbm
 [benchmark](https://www.spec.org/cpu2006/Docs/470.lbm.html): a fluid dynamics
 simulation using the Lattice-Boltzmann Method.
 
+lbm is an iterative algorithm - the problem is broken down into discrete
+time steps, and at each time step a bunch of calculations are done to
+simulate the change in the system. Each time step relies on the results
+of the previous one.
 
-There were a couple of issues with this benchmark:
+The benchmark uses OpenMP to parallelise the workload, spreading the
+calculations done in each time step across many CPUs. The number of
+calculations scales with the resolution of the simulation.
 
-1. The benchmark is compiled without any optimisation. Adding -O3 improves the
-   result 3.2x. Adding optimisation will improve x86_64, but we expect it to
-improve POWER9 results a lot more.
+Unfortunately, the resolution (and therefore the work done in each time
+step) is too small for modern CPUs with large numbers of SMT threads. OpenMP 
+doesn't have enough work to parallelise and the system stays relatively idle. This
+means the benchmark scales relatively poorly, and is definitely
+not making use of the large POWER9 system
 
+Also this benchmark is compiled without any optimisation. Recompiling with -O3 improves the
+   results 3.2x.
 
-2. Each time step has to complete before the next one can start.  Unfortunately
-   the resolution is quite small, which means there is very little work to do in
-each time step. Therefore there is a limit to how many CPUs we can scale to,
-there just isn't enough work.
-
-This is a very old benchmark, and really it should be resized to suit modern
-computers (eg increase resolution).
 
 
 ### x264 Video Encoding
@@ -55,44 +58,48 @@ and vectorisation optimisations are quite complex, so Nick only had a quick look
 the basics.  The systems and environments (e.g. gcc version 8.1 for Skylake, 8.0
 for POWER9) are not completely apples to apples so for now patterns are more
 important than the absolute results. Interestingly the output video files between
-architectures are not the same. All tests were run single threaded to
-avoid any SMT (simulatenous multi-threading) effects.
+architectures are not the same, particularly with different asm routines and 
+compiler optios used, which makes it difficult to verify the correctness of changes.
 
-Skylake is significantly faster than POWER9 on this test
-(Skylake: 9.20 fps, POWER9: 3.39 fps).
+All tests were run single threaded to avoid any SMT effects.
 
-One might hazard a guess that we could get better results by writing powerpc specific
-assembly for more functions (in the version of x264 that Phoronix used there are only
-six powerpc specific files compared with 21 x86 specific files). When running
-with only the common C code (using the configure option --disable-asm) we have about
-same performance (Skylake: 1.47 fps, POWER9: 1.54 fps). However even without the architecture
-specific asm, the output files are not identical between CPUs or
-different compile options, which is a concern with no floating point. Perhaps
-there is a bug or some undefined behaviour in the code?
+With the default upstream build, Skylake is significantly faster than POWER9 on this test
+(Skylake: 9.20 fps, POWER9: 3.39 fps). POWER9 contains some vectorised routines, so an
+initial suspicion is that Skylake's larger vector size may be responsible for its advantage.
 
-x264 compiles with -fno-tree-vectorize by default, which disables auto
-vectorization. Removing this option along with link time optimisations
-gives: Skylake: 2.25 fps,  POWER9: 3.02 fps. 
+Let's test our vector size suspicion by restricting
+Skylake to SSE4.2 code (with 128 bit vectors, the same width as POWER9). This hardly
+slows down the x86 CPU at all (Skylake: 8.37 fps, POWER9: 3.39 fps), which indicates it's
+not taking much advantage of the larger vectors.
 
-Now let's turn asm optimised code back on (removing the --disable-asm option).
-A costly function, quant_4x4x4 is not vectorized in the POWER9 code. Without
--fno-tree-vectorize and with a small change to the code gcc can automatically 
-vectorize it for us, giving up a slight speedup: Skylake: 9.20 fps, POWER9: 3.83 fps.
+So the next guess would be that x86 just has more and better optimized versions of costly
+functions (in the version of x264 that Phoronix used there are only six powerpc specific
+files compared with 21 x86 specific files). Without the time or expertise to dig into the
+complex task of writing vector code, we'll see if the compiler can help, and turn
+on autovectorisation (264 compiles with -fno-tree-vectorize by default, which disables 
+auto vectorization). Looking at a perf profile of the benchmark we can see
+that one costly function, quant_4x4x4, is not autovectorised. With a small change to the
+code, gcc does vectorise it, giving a slight speedup with the output file checksum unchanged
+(Skylake: 9.20 fps, POWER9: 3.83 fps).
 
-Even trying to account for the different vector sizes by restricting Skylake
-to SSE4.2 with 128 bit vectors (same as POWER9) we still aren't even close to
-Skylake: Skylake: 8.37 fps, POWER9: 3.83 fps.
+
+We got a small improvement with the compiler, but it looks like we may have gains left on the
+table with our vector code. If you're interested in looking into this, we do have some
+[active bounties](https://www.bountysource.com/teams/ibm/bounties) for x264 (lu-zero/x264).
+
 
 | Test |Skylake |POWER9|
 |-------|---------|-------|
-| Original |9.20 fps |3.39 fps|
-| Common C code only |1.47 fps | 1.54 fps|
-| Common C code and autovectorisation enabled| 2.25 fps | 3.02 fps| 
-| Arch specific asm and autovectorisation enabled| 9.20 fps | 3.83 ps |
-| Arch specific asm, autovectorisation enabled, same vector sizes | 8.37 fps | 3.83 fps|
+| Original - AVX256 |9.20 fps |3.39 fps|
+| Original - SSE4.2 | 8.37 fps | 3.39 fps|
+| Autovectorisation enabled, quant_4x4x4 vectorised| 9.20 fps | 3.83 fps |
 
-So we probably need some more powerpc specific implementations. If you're interested in looking into this, we do have some 
-[active bounties](https://www.bountysource.com/teams/ibm/bounties) for x264 (lu-zero/x264).
+Nick also investigated SMT and multi cores, and it looks like the code is
+not scalable enough to feed 176 threads on a 44 core system. Disabling SMT in parallel runs
+actually helped, but there was still idle time. That may be another thing to look at,
+although it may not be such a problem for smaller systems.
+
+
 
 ### Primesieve
 
@@ -138,8 +145,8 @@ is already enabled for Intel).
 | LAME | Duration | Speedup |
 |---------|-------------|--|
 | Default | 82.1s | n/a |
-| With optimisation flags | 16.3s | ~5.0x |
-| USE_FAST_LOG set | 15.6s | ~5.3x  |
+| With optimisation flags | 16.3s | 5.0x |
+| With optimisation flags and USE_FAST_LOG set | 15.6s | 5.3x  |
 
 For more detail see Joel's
 [writeup](https://shenki.github.io/LameMP3-on-Power9/).
@@ -190,8 +197,8 @@ The following results were from a dual 16-core POWER9 and are indicative of the 
 | Version of OpenSSL | Signs/s | Speedup |
 |--------------------|----------|---------|
 |1.1.0f              |    1921   |  n/a   |
-|1.1.0f with 4 patches|   3353   | ~1.74x  |
-|1.1.1-pre1          |    3383   | ~1.76x   | 
+|1.1.0f with 4 patches|   3353   | 1.74x  |
+|1.1.1-pre1          |    3383   | 1.76x   | 
 
 
 
@@ -211,9 +218,9 @@ in this benchmark:
 | BLAS used | Duration | Speedup |
 |---------|-------------|--|
 | libblas -O2 |64.2s | n/a |
-| libblas -Ofast |  36.1s | ~1.8x |
-| libatlas | 8.3s | ~7.7x  |
-|libopenblas | 4.2s | ~15.3x |
+| libblas -Ofast |  36.1s | 1.8x |
+| libatlas | 8.3s | 7.7x  |
+|libopenblas | 4.2s | 15.3x |
 
 
 You can read more details about this
@@ -266,6 +273,32 @@ Pinning the pts/bender-1.0.2, Pabellon Barcelona, CPU-Only test to a single
 |Baseline (GPU blend file) |  1509.97s (0.30%) | n/a |
 | Single 22-core POWER9 chip (CPU blend file)  | 458.64s (0.19%) | 3.29x  |
 | Two 22-core POWER9 chips (CPU blend file)  | 241.33s (0.25%) | 6.25x |
+
+
+
+
+### tl;dr
+
+A nice little summary table of the benchmarks we looked at:
+
+| Benchmark | Approximate Improvement |
+|-----------|-------------|
+| Parboil   |    3x	  |
+| x264      |	 1.1x	  |
+| Primesieve|	 1.1x	  |
+| LAME      |  	 5x	  |
+| FLAC      |	 3x	  |
+| OpenSSL   |	 2x	  |
+| SciKit-Learn | 7-15x   |
+| Blender   | 	 3x	  |	
+
+
+As some of these changes would also result in speedups on Intel and AMD, it
+would be interesting to see a re-run of the Phoronix benchmarks with these changes. 
+
+We could do with some more work on these, especially the Primesieve and x264 benchmarks. 
+
+
 
 
 [00]: /images/phoronix/blender-88threads.png "Blender with CPU Blend file"
