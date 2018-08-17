@@ -35,7 +35,7 @@ calculations done in each time step across many CPUs. The number of
 calculations scales with the resolution of the simulation.
 
 Unfortunately, the resolution (and therefore the work done in each time
-step) is too small for modern CPUs with large numbers of SMT (simulatenous multi-threading) threads. OpenMP 
+step) is too small for modern CPUs with large numbers of SMT (simultaneous multi-threading) threads. OpenMP 
 doesn't have enough work to parallelise and the system stays relatively idle. This
 means the benchmark scales relatively poorly, and is definitely
 not making use of the large POWER9 system
@@ -53,13 +53,13 @@ the basics. The systems and environments (e.g. gcc version 8.1 for Skylake, 8.0
 for POWER9) are not completely apples to apples so for now patterns are more
 important than the absolute results. Interestingly the output video files between
 architectures are not the same, particularly with different asm routines and 
-compiler options used, which makes it difficult to verify the correctness of changes.
+compiler options used, which makes it difficult to verify the correctness of any changes.
 
 All tests were run single threaded to avoid any SMT effects.
 
 With the default upstream build of x264, Skylake is significantly faster than POWER9 on this benchmark
 (Skylake: 9.20 fps, POWER9: 3.39 fps). POWER9 contains some vectorised routines, so an
-initial suspicion is that Skylake's larger vector size may be responsible for its advantage.
+initial suspicion is that Skylake's larger vector size may be responsible for its higher throughput.
 
 Let's test our vector size suspicion by restricting
 Skylake to SSE4.2 code (with 128 bit vectors, the same width as POWER9). This hardly
@@ -70,7 +70,7 @@ So the next guess would be that x86 just has more and better optimized versions 
 functions (in the version of x264 that Phoronix used there are only six powerpc specific
 files compared with 21 x86 specific files). Without the time or expertise to dig into the
 complex task of writing vector code, we'll see if the compiler can help, and turn
-on autovectorisation (264 compiles with -fno-tree-vectorize by default, which disables 
+on autovectorisation (x264 compiles with -fno-tree-vectorize by default, which disables 
 auto vectorization). Looking at a perf profile of the benchmark we can see
 that one costly function, quant_4x4x4, is not autovectorised. With a small change to the
 code, gcc does vectorise it, giving a slight speedup with the output file checksum unchanged
@@ -238,7 +238,7 @@ number of jobs created and therefore the number threads used.
 
 
 To obtain a realistic CPU measurement with more that 15 threads you can force
-the use of the cpu file by overwritting the gpu file with the cpu one:
+the use of the CPU file by overwriting the GPU file with the CPU one:
 
 ```
 $ cp
